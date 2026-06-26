@@ -102,11 +102,24 @@ end
 
 function jacobian(sol::CurveFitSolution{<:LinearCurveFitAlgorithm})
     x = sol.prob.x
-    xfun = sol.alg.xfun
-    J = Matrix{eltype(x)}(undef, length(x), 2)
-    J[:, 1] .= xfun.(x) # Slope
-    J[:, 2] .= 1        # Intercept
-    return J
+    alg = sol.alg
+    if alg.yfun === identity
+        # Linear model, compute Jacobian analytically
+        J = Matrix{eltype(x)}(undef, length(x), 2)
+        J[:, 1] .= alg.xfun.(x)
+        J[:, 2] .= 1
+        return J
+    else
+        # When there's a y-transform applied (e.g. power/exp fits) the residuals
+        # are in the original y-space so it would be incorrect to use the linear
+        # analytical Jacobian, instead we use DI.
+        a, b_stored = sol.u
+        u = [a, b_stored]
+        f_pred = u_curr -> begin
+            alg.yfun_inverse.(alg.yfun(u_curr[2]) .+ u_curr[1] .* alg.xfun.(x))
+        end
+        return DifferentiationInterface.jacobian(f_pred, AutoForwardDiff(), u)
+    end
 end
 
 function jacobian(sol::CurveFitSolution{<:PolynomialFitAlgorithm})
@@ -213,6 +226,19 @@ function jacobian(sol::CurveFitSolution{<:ExpSumFitAlgorithm})
     f_pred = u_curr -> map(i -> model_expsum(u_curr, x[i]), range)
 
     return DifferentiationInterface.jacobian(f_pred, AutoForwardDiff(), u)
+end
+
+function jacobian(sol::CurveFitSolution{<:KingCurveFitAlgorithm})
+    # King's law: U = t² where t = (E²−A)/B, so ∂U/∂A = −2t/B and ∂U/∂B = −2t²/B
+    A, B = sol.u
+    x = sol.prob.x
+    J = Matrix{eltype(x)}(undef, length(x), 2)
+    @inbounds for i in eachindex(x)
+        t = (x[i]^2 - A) / B
+        J[i, 1] = -2t / B    # ∂U/∂A
+        J[i, 2] = -2t^2 / B  # ∂U/∂B
+    end
+    return J
 end
 
 function jacobian(sol::CurveFitSolution{<:ModifiedKingCurveFitAlgorithm})

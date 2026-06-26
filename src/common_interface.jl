@@ -223,6 +223,10 @@ be converted to a linear fit in a specific function space by choosing appropriat
 `xfun` and `yfun`. The `yfun_inverse` is used to convert the fitted values back to the
 original space (can be specified by defining `InverseFunctions.inverse`).
 
+When `yfun` is not `identity`, `yfun_inverse` is applied to the fitted intercept before
+storing it, so that `sol.u = (a, b)` directly satisfies the original-space formula
+(e.g. `y = b * exp(a*x)` for [`ExpCurveFitAlgorithm`](@ref)).
+
 This algorithm does not support bounds constraints (`lb`/`ub`).
 """
 function LinearCurveFitAlgorithm(;
@@ -291,7 +295,7 @@ ExpCurveFitAlgorithm() = LinearCurveFitAlgorithm(; xfun = identity, yfun = log)
 Represents a king curve fitting problem where `x` and `y` are the data points to
 fit. This algorithm does not support passing weights through `sigma` in
 [`CurveFitProblem`](@ref). This algorithm does not support bounds constraints (`lb`/`ub`).
-We want to solve for `a` and `b` according to original King's law (1910) that represents
+We want to solve for `A` and `B` according to original King's law (1910) that represents
 the relationship between voltage (E) and velocity (U) in a hotwire anemometer:
 
 ```math
@@ -304,7 +308,7 @@ or
 x^2 = A + B y^{1/2}
 ```
 """
-KingCurveFitAlgorithm() = LinearCurveFitAlgorithm(; xfun = abs2, yfun = sqrt)
+struct KingCurveFitAlgorithm <: AbstractCurveFitAlgorithm end
 
 @doc doc"""
     ModifiedKingCurveFitAlgorithm(alg::Union{Nothing, AbstractNonlinearAlgorithm} = nothing)
